@@ -1,0 +1,8 @@
+{
+  "root": "0xadd678621aad1bac3f5c07807c66de2621f6a4fd96fdf0382f65d6b507f766ad",
+  "payoutTokens": [
+    "0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0",
+    "0x177127622c4A00F3d409B75571e12cB3c8973d3c"
+  ],
+  "payoutTotals": ["999", "9"]
+}

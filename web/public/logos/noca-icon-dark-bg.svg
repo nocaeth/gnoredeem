@@ -1,0 +1,8 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dark canvas background with rounded corners -->
+  <rect width="256" height="256" rx="40" fill="#0B0B0B"/>
+  <!-- N lettermark from Noca wordmark, white on dark -->
+  <g transform="translate(64, 52) scale(0.44)">
+    <path d="M0 334.702V8.63184H92.5464L180.298 161.118L207.15 219.139L202.355 8.63184H289.627V334.702H197.081L109.329 181.737L82.9561 124.674L87.7512 334.702H0Z" fill="white"/>
+  </g>
+</svg>

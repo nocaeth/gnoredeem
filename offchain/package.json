@@ -1,0 +1,13 @@
+{
+  "name": "gnoredeem-merkle",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build-merkle": "bun build-merkle.ts",
+    "fetch-deposits": "bun fetch-deposits.ts"
+  },
+  "dependencies": {
+    "@openzeppelin/merkle-tree": "^1.0.8",
+    "viem": "^2.53.1"
+  }
+}

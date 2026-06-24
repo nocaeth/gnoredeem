@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Build caches / output
+*.tsbuildinfo
+
+# Env
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+*.log

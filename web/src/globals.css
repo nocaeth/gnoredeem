@@ -1,0 +1,101 @@
+@import "tailwindcss";
+@import "@rainbow-me/rainbowkit/styles.css";
+
+/* ── Dark mode: class-based (html has class="dark"; dark-first app) ────────── */
+@custom-variant dark (&:is(.dark *));
+
+/* ── Fonts — proprietary, copied from the gno.now dashboard repo ───────────
+   These point at /public/fonts/. The app looks fine without them via the
+   system fallbacks below. See README for how to copy the real woff2 files. */
+@font-face {
+  font-family: "Die Grotesk";
+  src: url("/fonts/die-grotesk-vf-roman.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "GT America Mono";
+  src: url("/fonts/GT-America-Mono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+/* ── Theme tokens (dark palette from gno.now) ───────────────────────────────
+   Values are dark by default — this is a dark-first single page. */
+@theme {
+  --color-background: #0b0b0b;
+  --color-foreground: #ffffff;
+
+  --color-card: #141414;
+  --color-card-foreground: #ffffff;
+
+  --color-border: #2a2a2a;
+
+  --color-muted: #161616;
+  --color-muted-foreground: #9a9a9f;
+
+  /* Accent — coral. Use SPARINGLY: primary CTAs + key numbers only. */
+  --color-accent: #ff8566;
+  --color-accent-foreground: #ffffff;
+  --color-accent-muted: rgba(255, 133, 102, 0.12);
+
+  --color-positive: #32d74b;
+  --color-negative: #ff453a;
+
+  --radius: 0.5rem;
+
+  --font-sans: "Die Grotesk", ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "GT America Mono", ui-monospace, "SF Mono", "Consolas", monospace;
+}
+
+/* ── Base styles ────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-variant-numeric: tabular-nums;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: 0.875rem; /* 14px body scale */
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code,
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Section label — 11px, uppercase, tracked, weight 600, muted. */
+.section-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-muted-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

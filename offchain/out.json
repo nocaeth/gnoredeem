@@ -1,0 +1,55 @@
+{
+  "root": "0xadd678621aad1bac3f5c07807c66de2621f6a4fd96fdf0382f65d6b507f766ad",
+  "payoutTokens": [
+    "0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0",
+    "0x177127622c4A00F3d409B75571e12cB3c8973d3c"
+  ],
+  "payoutSymbols": [
+    "USDC.e",
+    "COW"
+  ],
+  "payoutTotals": [
+    "999",
+    "9"
+  ],
+  "dust": [
+    "1",
+    "1"
+  ],
+  "totalGnoEquivalent": "330",
+  "holderCount": 3,
+  "manifest": [
+    {
+      "holder": "0x00000000000000000000000000000000000000a0",
+      "amounts": [
+        "303",
+        "3"
+      ],
+      "proof": [
+        "0xadb2e29fb726e32db0dff2cf5a488025bf40b8bd43b6dbe00c58bb452f85fe44",
+        "0xeb876f14bd4607f1da7638626e36b922812c8aa4dfd577fa912b030cb4bc616a"
+      ]
+    },
+    {
+      "holder": "0x00000000000000000000000000000000000000a1",
+      "amounts": [
+        "363",
+        "3"
+      ],
+      "proof": [
+        "0x653a6499ae38fbee2b55a729cf31442e88fb8b8d9c36812c8ddcdaaec2130315",
+        "0xeb876f14bd4607f1da7638626e36b922812c8aa4dfd577fa912b030cb4bc616a"
+      ]
+    },
+    {
+      "holder": "0x00000000000000000000000000000000000000a2",
+      "amounts": [
+        "333",
+        "3"
+      ],
+      "proof": [
+        "0x84c1fe6f07c177963db5cea21868d8c68f2e0b620e27235a2828d0eea7235c60"
+      ]
+    }
+  ]
+}
