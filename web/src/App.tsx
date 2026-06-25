@@ -243,7 +243,11 @@ function DepositCard({
           placeholder="0.0"
           value={amount}
           disabled={disabled || pending}
-          onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+          onChange={(e) => {
+            // Accept or reject the keystroke; never silently rewrite (e.g. "1e3"→"13") an irreversible deposit.
+            const v = e.target.value
+            if (v === '' || /^\d*\.?\d*$/.test(v)) setAmount(v)
+          }}
           className="w-full bg-transparent font-mono tabular-nums text-lg outline-none placeholder:text-muted-foreground disabled:opacity-50"
         />
         <button
@@ -274,7 +278,7 @@ function DepositCard({
 
 // Phase 2. Always rendered so the claim path is discoverable; degrades to
 // "not open yet" until the distributor + manifest are live, mirroring the deposit side.
-function ClaimSection({ isConnected }: { isConnected: boolean }) {
+function ClaimSection({ isConnected, wrongChain }: { isConnected: boolean; wrongChain: boolean }) {
   const { live, hasManifest, manifestLoading, manifestError, entry, basket, activated, claimed, claim, pending } =
     useClaim()
 
@@ -300,7 +304,11 @@ function ClaimSection({ isConnected }: { isConnected: boolean }) {
         <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5">
           <div className="grid grid-cols-2 gap-5">
             {basket?.map((leg) => (
-              <Metric key={leg.token} label={leg.symbol} value={formatTokenAmount(leg.amount, leg.decimals)} />
+              <Metric
+                key={leg.token}
+                label={leg.symbol}
+                value={leg.decimals === undefined ? '—' : formatTokenAmount(leg.amount, leg.decimals)}
+              />
             ))}
           </div>
           {claimed ? (
@@ -311,11 +319,17 @@ function ClaimSection({ isConnected }: { isConnected: boolean }) {
             <>
               <button
                 type="button"
-                disabled={pending || !activated}
+                disabled={pending || !activated || wrongChain}
                 onClick={claim}
                 className="rounded-lg bg-accent px-4 py-2.5 font-medium text-accent-foreground transition-opacity enabled:hover:opacity-90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
               >
-                {pending ? 'Claiming…' : activated ? 'Claim redemption' : 'Claiming opens once funded'}
+                {pending
+                  ? 'Claiming…'
+                  : wrongChain
+                    ? 'Switch to Gnosis Chain'
+                    : activated
+                      ? 'Claim redemption'
+                      : 'Claiming opens once funded'}
               </button>
               {!activated && (
                 <p className="text-xs text-muted-foreground">
@@ -399,6 +413,26 @@ export function App() {
     query: { enabled: contractLive },
   })
 
+  // Immutables of the configured deposit contract — verified against config before allowing deposits.
+  const { data: onchainGno } = useReadContract({
+    address: REDEMPTION_DEPOSIT_ADDRESS,
+    abi: redemptionDepositAbi,
+    functionName: 'gno',
+    query: { enabled: contractLive },
+  })
+  const { data: onchainOsgno } = useReadContract({
+    address: REDEMPTION_DEPOSIT_ADDRESS,
+    abi: redemptionDepositAbi,
+    functionName: 'osgno',
+    query: { enabled: contractLive },
+  })
+  const { data: onchainSafe } = useReadContract({
+    address: REDEMPTION_DEPOSIT_ADDRESS,
+    abi: redemptionDepositAbi,
+    functionName: 'safe',
+    query: { enabled: contractLive },
+  })
+
   // ── Derived ──
   const windowClosed = deadline !== undefined && nowSec > Number(deadline)
   const secondsLeft = deadline !== undefined ? Number(deadline) - nowSec : NaN
@@ -407,11 +441,29 @@ export function App() {
   const effectiveRate = frozenRate ?? rate
   const rateIsFrozen = frozenRate !== undefined
 
+  // Hard safety gate: deposits are irreversible and forwarded straight to safe(), so the deployed
+  // contract's token + Safe immutables MUST match the expected GIP-151 config. A mismatch (wrong
+  // configured address / wrong Safe) disables deposits entirely — warning-only is too weak here.
+  const immutablesLoaded =
+    onchainGno !== undefined && onchainOsgno !== undefined && onchainSafe !== undefined
+  const immutablesMismatch =
+    immutablesLoaded &&
+    (onchainGno.toLowerCase() !== TOKENS[0].address.toLowerCase() ||
+      onchainOsgno.toLowerCase() !== TOKENS[1].address.toLowerCase() ||
+      !isAddressSet(REDEMPTION_SAFE_ADDRESS) ||
+      onchainSafe.toLowerCase() !== REDEMPTION_SAFE_ADDRESS.toLowerCase())
+
   let depositDisabled = false
   let disabledReason: string | null = null
   if (!contractLive) {
     depositDisabled = true
     disabledReason = 'Deposits are not open yet.'
+  } else if (!immutablesLoaded) {
+    depositDisabled = true
+    disabledReason = 'Verifying the deposit contract…'
+  } else if (immutablesMismatch) {
+    depositDisabled = true
+    disabledReason = null // surfaced by the prominent banner below
   } else if (!isConnected) {
     depositDisabled = true
     disabledReason = 'Connect your wallet to deposit.'
@@ -459,6 +511,14 @@ export function App() {
         </button>
       )}
 
+      {contractLive && immutablesMismatch && (
+        <div className="mb-8 w-full rounded-lg border border-negative bg-card px-4 py-3 text-sm text-negative">
+          <span className="font-semibold">Deposit contract failed verification.</span> Its GNO, osGNO,
+          or Safe address doesn’t match the expected GIP-151 configuration. Deposits are disabled — do
+          not proceed, and confirm you’re on the official site.
+        </div>
+      )}
+
       <div className="flex flex-col gap-10">
         {/* Deposit — the only boxed surface; it's an input, not a readout */}
         <div className="flex flex-col gap-3">
@@ -481,7 +541,7 @@ export function App() {
         </div>
 
         {/* Claim — phase 2; always present, degrades to "not open yet" until the distributor is live */}
-        <ClaimSection isConnected={isConnected} />
+        <ClaimSection isConnected={isConnected} wrongChain={wrongChain} />
 
         {/* Your deposit so far */}
         <Section title="Your deposit so far">

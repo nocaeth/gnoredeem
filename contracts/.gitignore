@@ -1,5 +1,6 @@
 out/
 cache/
+# Solidity deps are not vendored — run `make install-contract-deps` to fetch pinned versions.
 lib/
 broadcast/
 .env

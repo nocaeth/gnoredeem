@@ -27,6 +27,10 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract RedemptionDistributor {
     using SafeERC20 for IERC20;
 
+    /// @notice GIP-151 is a one-off redemption with a small basket (expected <=5 legs).
+    ///         This hard cap leaves limited operational slack while preventing gas-bricked claims.
+    uint256 public constant MAX_PAYOUT_TOKENS = 10;
+
     /// @notice Merkle root over all holder leaves. Immutable; published with the claim manifest.
     bytes32 public immutable merkleRoot;
 
@@ -52,6 +56,7 @@ contract RedemptionDistributor {
     constructor(bytes32 merkleRoot_, address[] memory tokens, uint256[] memory totals) {
         require(merkleRoot_ != bytes32(0), "zero root");
         require(tokens.length > 0, "empty basket");
+        require(tokens.length <= MAX_PAYOUT_TOKENS, "too many tokens");
         require(tokens.length == totals.length, "length mismatch");
         merkleRoot = merkleRoot_;
         for (uint256 i = 0; i < tokens.length; i++) {

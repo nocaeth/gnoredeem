@@ -15,12 +15,11 @@ interface IERC20 {
 /// @dev    Deliberately minimal:
 ///         - The contract NEVER custodies funds; every deposit is forwarded to `safe` in the same call.
 ///         - It records RAW amounts of GNO and osGNO separately (ground truth). The single
-///           osGNO->GNO snapshot rate is baked in as an immutable at deploy: the contract is deployed
-///           AFTER the proposal passes, when that rate is already fixed and published, so it is known
-///           up front. It is exposed via gnoEquivalent()/totalGnoEquivalent() for transparency and
-///           verifiable against getRate() at the snapshot block. The contract reads no oracle at
-///           runtime; the canonical redemption Merkle tree is still built off-chain from the raw
-///           amounts using the same rate.
+///           osGNO->GNO snapshot rate is baked in as the immutable `osgnoRate` at deploy: the contract
+///           is deployed AFTER the proposal passes, when that rate is already fixed and published, so it
+///           is known up front and verifiable against getRate() at the snapshot block. The contract
+///           reads no oracle at runtime; the canonical redemption Merkle tree is built off-chain from
+///           the raw amounts and `osgnoRate` (no on-chain GNO-equivalent view is needed).
 ///         - A holder of both tokens simply calls `deposit` twice (once per token); both are credited.
 ///         - There is no withdrawal: this is deployed only after GIP-151 has passed on Snapshot.
 ///         Assumes GNO and osGNO are standard, non-fee-on-transfer ERC20s (verified on Gnosis Chain).
@@ -61,17 +60,9 @@ contract RedemptionDeposit {
         osgnoRate = osgnoRate_;
     }
 
-    /// @notice A holder's GNO-equivalent deposit: raw GNO + raw osGNO valued at the fixed snapshot rate.
-    /// @dev Transparency view. The canonical Merkle tree is built off-chain from the raw `deposited`
-    ///      amounts using the same rate; this mirrors that math (floor division).
-    function gnoEquivalent(address holder) external view returns (uint256) {
-        return deposited[holder][address(gno)] + deposited[holder][address(osgno)] * osgnoRate / 1e18;
-    }
-
-    /// @notice Total GNO-equivalent across all deposits (raw GNO total + raw osGNO total at the fixed rate).
-    function totalGnoEquivalent() external view returns (uint256) {
-        return totalDeposited[address(gno)] + totalDeposited[address(osgno)] * osgnoRate / 1e18;
-    }
+    // GNO-equivalent (rawGNO + rawOsGNO * osgnoRate / 1e18) is computed off-chain by the Merkle builder
+    // from the public `deposited`/`totalDeposited` mappings and the `osgnoRate` immutable — no on-chain
+    // view is needed, so none is exposed (keeps the surface minimal for this one-off).
 
     /// @notice Opt in by depositing `amount` of `token` (GNO or osGNO). Forwarded straight to the Safe.
     /// @dev Requires a prior ERC20 approval of this contract for `amount` of `token`.
@@ -93,8 +84,7 @@ contract RedemptionDeposit {
 
     /// @dev transferFrom that tolerates tokens returning no data and reverts on `false`.
     function _safeTransferFrom(address token, address from, address to, uint256 amount) private {
-        (bool ok, bytes memory data) =
-            token.call(abi.encodeCall(IERC20.transferFrom, (from, to, amount)));
+        (bool ok, bytes memory data) = token.call(abi.encodeCall(IERC20.transferFrom, (from, to, amount)));
         if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert TransferFailed();
     }
 }

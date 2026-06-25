@@ -92,17 +92,6 @@ contract RedemptionDepositTest is Test {
         assertEq(dep.totalDeposited(address(gno)), 17e18);
     }
 
-    function test_gnoEquivalent_usesFixedRate() public {
-        vm.startPrank(alice);
-        dep.deposit(address(gno), 10e18);
-        dep.deposit(address(osgno), 5e18);
-        vm.stopPrank();
-
-        // 10 GNO + 5 osGNO * 1.2 = 16 GNO-equivalent
-        assertEq(dep.gnoEquivalent(alice), 16e18);
-        assertEq(dep.totalGnoEquivalent(), 16e18);
-    }
-
     function test_revert_afterDeadline() public {
         vm.warp(deadline + 1);
         vm.prank(alice);

@@ -7,10 +7,12 @@ import {RedemptionDistributor} from "../src/RedemptionDistributor.sol";
 
 /// @title  Deploy RedemptionDistributor from the published Merkle manifest (Gnosis Chain).
 /// @notice Reads root / payoutTokens / payoutTotals DIRECTLY from the builder output (offchain/out.json)
-///         — no hand transcription — and asserts the deployed state matches the manifest, IN ORDER.
-///         The Merkle leaf binds `amounts` only POSITIONALLY, so a transposed token order would
-///         silently mis-pay the whole basket; loading from the manifest + the post-deploy order
-///         asserts make that impossible to ship (audit finding H1).
+///         — no hand transcription — and re-asserts the deployed state matches that manifest, in order.
+///         Note this binds the contract to the MANIFEST, not to the GIP-151-approved basket: both sides
+///         of every assert come from the same out.json. The token/total set is operator-supplied
+///         governance data with no on-chain source of truth, so the run echoes each token+symbol+total
+///         with a VERIFY tag — check them against the published GIP-151 basket and the Safe's holdings
+///         before funding (same trust class as `safe` in Deploy.s.sol).
 /// @dev    Usage:
 ///           MANIFEST_PATH=../offchain/out.json \
 ///           forge script script/DeployDistributor.s.sol:DeployDistributor --rpc-url $RPC_GNOSIS --broadcast --account <acct>
@@ -21,14 +23,19 @@ contract DeployDistributor is Script {
     function run() external returns (RedemptionDistributor dist) {
         require(block.chainid == 100, "not Gnosis Chain (expected 100)");
 
-        string memory path = vm.envOr("MANIFEST_PATH", string("../offchain/out.json"));
+        // No default: a fallback to the checked-in sample (offchain/out.json) would let an operator
+        // deploy the fixture root to mainnet. MANIFEST_PATH must be passed explicitly.
+        string memory path = vm.envOr("MANIFEST_PATH", string(""));
+        require(bytes(path).length > 0, "MANIFEST_PATH unset - pass the build-merkle output explicitly");
         string memory json = vm.readFile(path);
 
         bytes32 root = json.readBytes32(".root");
         address[] memory tokens = json.readAddressArray(".payoutTokens");
         string[] memory totalStrs = json.readStringArray(".payoutTotals"); // strings: full uint256 precision
+        string[] memory symbols = json.readStringArray(".payoutSymbols");
         require(root != bytes32(0), "zero root in manifest");
         require(tokens.length == totalStrs.length, "tokens/totals length mismatch");
+        require(tokens.length == symbols.length, "tokens/symbols length mismatch");
 
         uint256[] memory totals = new uint256[](totalStrs.length);
         for (uint256 i = 0; i < totalStrs.length; i++) {
@@ -38,9 +45,11 @@ contract DeployDistributor is Script {
         console2.log("chainid ", block.chainid);
         console2.log("manifest", path);
         console2.logBytes32(root);
+        // VERIFY each leg against the published GIP-151 basket + the Safe's holdings before funding.
         for (uint256 i = 0; i < tokens.length; i++) {
-            console2.log("  token", tokens[i]);
-            console2.log("  total", totals[i]);
+            console2.log("  symbol (VERIFY!)", symbols[i]);
+            console2.log("  token ", tokens[i]);
+            console2.log("  total ", totals[i]);
         }
 
         vm.startBroadcast();

@@ -199,6 +199,18 @@ contract RedemptionDistributorTest is Test {
         new RedemptionDistributor(root, tk, tot);
     }
 
+    function test_ctor_revertsOnTooManyTokens() public {
+        uint256 n = 11; // MAX_PAYOUT_TOKENS is 10 for the one-off GIP-151 basket.
+        address[] memory tk = new address[](n);
+        uint256[] memory tot = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            tk[i] = address(uint160(i + 1));
+            tot[i] = 1;
+        }
+        vm.expectRevert(bytes("too many tokens"));
+        new RedemptionDistributor(root, tk, tot);
+    }
+
     function test_ctor_revertsOnDuplicateToken() public {
         address[] memory tk = new address[](2);
         tk[0] = address(A);

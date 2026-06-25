@@ -23,6 +23,7 @@ import { toast } from 'sonner'
 import type { Address } from 'viem'
 import { erc20Abi, redemptionDistributorAbi } from '../abis'
 import {
+  GNOSIS_CHAIN_ID,
   REDEMPTION_CLAIM_MANIFEST_URL,
   REDEMPTION_DISTRIBUTOR_ADDRESS,
   isClaimLive,
@@ -36,7 +37,7 @@ export type ClaimManifest = {
   payoutTotals: string[]
   manifest: ClaimEntry[]
 }
-export type BasketLeg = { token: Address; symbol: string; amount: bigint; decimals: number }
+export type BasketLeg = { token: Address; symbol: string; amount: bigint; decimals: number | undefined }
 
 const live = isClaimLive()
 
@@ -91,12 +92,17 @@ export function useClaim() {
 
   const basket: BasketLeg[] | null =
     entry && manifest.data
-      ? manifest.data.payoutTokens.map((token, i) => ({
-          token,
-          symbol: manifest.data!.payoutSymbols[i] ?? '?',
-          amount: BigInt(entry.amounts[i] ?? '0'),
-          decimals: Number(decimalsData?.[i]?.result ?? 18),
-        }))
+      ? manifest.data.payoutTokens.map((token, i) => {
+          // Don't default to 18: a 6-dec leg (e.g. USDC.e) would render orders too small while the
+          // decimals() read loads or if it fails. undefined → "—" instead of a wrong, near-zero number.
+          const dec = decimalsData?.[i]
+          return {
+            token,
+            symbol: manifest.data!.payoutSymbols[i] ?? '?',
+            amount: BigInt(entry.amounts[i] ?? '0'),
+            decimals: dec?.status === 'success' ? Number(dec.result) : undefined,
+          }
+        })
       : null
 
   const { writeContract, data: hash, error, isPending, reset } = useWriteContract()
@@ -121,6 +127,7 @@ export function useClaim() {
       abi: redemptionDistributorAbi,
       functionName: 'claim',
       args: [account, entry.amounts.map((a) => BigInt(a)), entry.proof],
+      chainId: GNOSIS_CHAIN_ID,
     })
   }
 

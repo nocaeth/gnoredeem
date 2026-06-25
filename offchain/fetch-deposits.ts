@@ -7,7 +7,12 @@
  *
  * Usage:
  *   GNOSIS_RPC=<url> bun fetch-deposits.ts <depositContract> <basket.json> [out=build-config.json] \
- *       [--from-block N] [--to-block N]
+ *       --to-block N [--from-block N]
+ *
+ *   --to-block is REQUIRED: the first FINALIZED block with timestamp > the deposit deadline (the cutoff
+ *   that provably closes the window). The script verifies finality + that the block is strictly after
+ *   the deadline, and reconciles the reconstructed deposit sums against the contract's totalDeposited()
+ *   before emitting a config — so a dropped getLogs window can never silently mis-build the root.
  *
  *   basket.json = [{ "token": "0x..", "symbol": "USDC", "total": "<raw amount earmarked for redeemers>" }, ...]
  *
@@ -27,6 +32,13 @@ const VIEW_ABI = [
   { type: 'function', name: 'osgno', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
   { type: 'function', name: 'osgnoRate', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'deadline', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  {
+    type: 'function',
+    name: 'totalDeposited',
+    stateMutability: 'view',
+    inputs: [{ type: 'address' }],
+    outputs: [{ type: 'uint256' }],
+  },
 ] as const
 
 // ── arg parsing ──────────────────────────────────────────────────────────────
@@ -41,7 +53,7 @@ for (let i = 0; i < raw.length; i++) {
 }
 const [contractArg, basketPath, outPath = 'build-config.json'] = positional
 if (!contractArg || !basketPath) {
-  console.error('usage: bun fetch-deposits.ts <depositContract> <basket.json> [out.json] [--from-block N] [--to-block N]')
+  console.error('usage: bun fetch-deposits.ts <depositContract> <basket.json> [out.json] --to-block N [--from-block N]')
   process.exit(1)
 }
 
@@ -58,7 +70,27 @@ const [gno, osgno, osgnoRate, deadline] = (await Promise.all([
   read('deadline'),
 ])) as [Address, Address, bigint, bigint]
 
-const toBlock = toBlockArg ?? (await client.getBlockNumber())
+// The cutoff block must be (a) explicit — never silently default to chain head, (b) reorg-safe
+// (finalized), and (c) strictly AFTER the deposit deadline. deposit() accepts while
+// block.timestamp <= deadline, so any cutoff at/before the deadline could miss still-valid later
+// deposits; the correct cutoff is the first finalized block with timestamp > deadline.
+if (toBlockArg === undefined) {
+  console.error(
+    'refusing to default --to-block to chain head: pass the first FINALIZED block with timestamp > the deposit deadline. Head is reorg-unsafe and may miss or over-include deposits.',
+  )
+  process.exit(1)
+}
+const toBlock = toBlockArg
+const finalized = await client.getBlock({ blockTag: 'finalized' })
+if (toBlock > finalized.number) {
+  throw new Error(`--to-block ${toBlock} is past the finalized head ${finalized.number} — not reorg-safe; wait for finality`)
+}
+const cutoff = await client.getBlock({ blockNumber: toBlock })
+if (cutoff.timestamp <= deadline) {
+  throw new Error(
+    `--to-block ${toBlock} (ts ${cutoff.timestamp}) is not strictly after the deposit deadline ${deadline} — deposits may still be valid at/after it; use the first block with timestamp > deadline`,
+  )
+}
 
 // Chunked log fetch — Gnosis public RPCs cap getLogs ranges; a single 240k-block window would be
 // silently truncated, which would mis-build the root. Walk fixed windows so nothing is dropped.
@@ -88,6 +120,20 @@ const deposits = [...agg.entries()]
   .sort(([a], [b]) => (a < b ? -1 : 1))
   .map(([holder, v]) => ({ holder, gno: v.gno.toString(), osgno: v.osgno.toString() }))
 
+// Reconcile the reconstructed event sums against the contract's own totals at the SAME cutoff block.
+// A chunked getLogs range can silently drop a window on a flaky RPC; this is the tripwire — if the
+// sums don't match on-chain totalDeposited(), the root would be wrong, so abort instead of emitting it.
+const [onchainGno, onchainOsgno] = (await Promise.all([
+  client.readContract({ address: deposit, abi: VIEW_ABI, functionName: 'totalDeposited', args: [gno], blockNumber: toBlock }),
+  client.readContract({ address: deposit, abi: VIEW_ABI, functionName: 'totalDeposited', args: [osgno], blockNumber: toBlock }),
+])) as [bigint, bigint]
+const sumGno = deposits.reduce((s, d) => s + BigInt(d.gno), 0n)
+const sumOsgno = deposits.reduce((s, d) => s + BigInt(d.osgno), 0n)
+if (sumGno !== onchainGno)
+  throw new Error(`GNO event sum ${sumGno} != on-chain totalDeposited(GNO) ${onchainGno} at block ${toBlock} — logs incomplete; aborting`)
+if (sumOsgno !== onchainOsgno)
+  throw new Error(`osGNO event sum ${sumOsgno} != on-chain totalDeposited(osGNO) ${onchainOsgno} at block ${toBlock} — logs incomplete; aborting`)
+
 const basket = JSON.parse(readFileSync(basketPath, 'utf8'))
 if (!Array.isArray(basket)) throw new Error('basket file must be a JSON array of { token, symbol, total }')
 
@@ -99,17 +145,23 @@ const config = {
     depositContract: deposit,
     gno,
     osgno,
+    osgnoRate: osgnoRate.toString(), // frozen immutable, carried as provenance so build-merkle can bind to it
     deadline: deadline.toString(),
     fromBlock: fromBlock.toString(),
     toBlock: toBlock.toString(),
+    toBlockHash: cutoff.hash,
+    toBlockTimestamp: cutoff.timestamp.toString(),
+    finalizedHead: finalized.number.toString(),
+    totalDeposited: { gno: onchainGno.toString(), osgno: onchainOsgno.toString() },
     eventCount: logs.length,
     holderCount: deposits.length,
-    rpc: RPC,
   },
 }
 writeFileSync(outPath, JSON.stringify(config, null, 2))
 
 console.log(`osgnoRate (on-chain immutable): ${osgnoRate}`)
 console.log(`deposits: ${deposits.length} holders from ${logs.length} events  [blocks ${fromBlock}..${toBlock}]`)
+console.log(`cutoff:   block ${toBlock} ts ${cutoff.timestamp} > deadline ${deadline}  hash ${cutoff.hash}`)
+console.log(`reconciled vs on-chain totalDeposited: GNO ${sumGno}, osGNO ${sumOsgno} (match)`)
 console.log(`basket:   ${basket.length} assets`)
 console.log(`wrote ${outPath}  ->  next: bun build-merkle.ts ${outPath} out.json`)

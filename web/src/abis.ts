@@ -91,6 +91,11 @@ export const redemptionDepositAbi = [
     inputs: [],
     outputs: [{ type: 'uint256' }],
   },
+  // Immutables — read on the client to verify the configured deposit address is the expected contract
+  // before allowing irreversible deposits.
+  { type: 'function', name: 'gno', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'osgno', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'safe', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
   {
     type: 'event',
     name: 'Deposited',
