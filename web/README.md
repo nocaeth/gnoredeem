@@ -30,13 +30,6 @@ bun run build    # tsc + vite build → dist/
 3. Set `REDEMPTION_CLAIM_DATE` (when claiming opens) once the vote timing is known. The deposit
    window close is read on-chain from the contract's `deadline`.
 4. Set `VITE_WALLETCONNECT_PROJECT_ID`.
-5. **Fonts:** copy the two proprietary woff2 files into `public/fonts/`:
-   ```
-   mkdir -p public/fonts
-   cp /Users/dave/projects/active/gnosis-dashboard/web/public/fonts/die-grotesk-vf-roman.woff2 public/fonts/
-   cp /Users/dave/projects/active/gnosis-dashboard/web/public/fonts/GT-America-Mono-Regular.woff2 public/fonts/
-   ```
-   The app renders fine with system fallbacks if they're absent.
 
 ## Verified on-chain (Gnosis Chain, chainId 100)
 - GNO `0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb` (18 dec)
