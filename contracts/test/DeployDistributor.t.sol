@@ -12,7 +12,10 @@ contract DeployDistributorTest is Test {
     using stdJson for string;
 
     function test_deployFromManifest_matchesInOrder() public {
-        string memory json = vm.readFile("test/fixtures/manifest.json");
+        string memory projectRoot = vm.projectRoot();
+        string memory localFixture = string.concat(projectRoot, "/test/fixtures/manifest.json");
+        string memory rootFixture = string.concat(projectRoot, "/contracts/test/fixtures/manifest.json");
+        string memory json = vm.readFile(vm.isFile(localFixture) ? localFixture : rootFixture);
         bytes32 root = json.readBytes32(".root");
         address[] memory tokens = json.readAddressArray(".payoutTokens");
         string[] memory totalStrs = json.readStringArray(".payoutTotals");

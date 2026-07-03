@@ -23,7 +23,7 @@ interface IERC20 {
 ///         - A holder of both tokens simply calls `deposit` twice (once per token); both are credited.
 ///         - There is no withdrawal: this is deployed only after GIP-151 has passed on Snapshot.
 ///         Assumes GNO and osGNO are standard, non-fee-on-transfer ERC20s (verified on Gnosis Chain).
-///         Pending audit. Constructor addresses (safe) and `deadline` are set at deployment.
+///         Constructor addresses (safe) and `deadline` are set at deployment.
 contract RedemptionDeposit {
     /// @notice GNO token (Gnosis Chain).
     IERC20 public immutable gno;

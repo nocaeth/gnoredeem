@@ -30,17 +30,15 @@ export const STAKEWISE_RATE_PROVIDER: Address =
 
 // ── Deployment-dependent — set these once the contract is live ───────────────
 
-/**
- * TODO: deploy RedemptionDeposit, then paste its Gnosis Chain address here.
- * While this is the zero address the deposit UI shows "Deposits not open yet".
- */
-export const REDEMPTION_DEPOSIT_ADDRESS: Address = ZERO_ADDRESS
+/** RedemptionDeposit deployed on Gnosis Chain. */
+export const REDEMPTION_DEPOSIT_ADDRESS: Address =
+  '0xB53e4a513C1fbb11a66Da851643126D933489C4D'
 
 /**
  * TODO: set the Redemption Safe address (the Safe that receives deposits / pays out).
  * Used only for the transparency link.
  */
-export const REDEMPTION_SAFE_ADDRESS: Address = ZERO_ADDRESS
+export const REDEMPTION_SAFE_ADDRESS: Address = '0xD8cD32876624bE785E7CbdA82bC93f585e8b1C2D'
 
 /**
  * TODO: redemption (claim) date — when claiming will be possible. This depends on
