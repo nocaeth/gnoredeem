@@ -1,0 +1,35 @@
+# CI-only redirect. nocaeth/.github's shared ci-solidity.yml (see .github/workflows/ci.yml)
+# runs `forge fmt/build/test` from the repo root with no working-directory input, but this
+# repo's Foundry project lives in contracts/. This file points the default profile at the
+# nested contracts/* paths so CI exercises the real project instead of silently no-op'ing
+# ("Nothing to compile" on an empty root - verified locally before adding this file).
+#
+# contracts/foundry.toml remains the source of truth for local dev (`cd contracts && forge
+# ...`, `make -C contracts install-contract-deps`) and is unchanged.
+#
+# DeployDistributor.t.sol already anticipates being run from either root (project root =
+# repo root, fixture at contracts/test/fixtures/...) or contracts/ (project root =
+# contracts/, fixture at test/fixtures/...) via vm.projectRoot() + vm.isFile fallback, so
+# both fs_permissions entries below are required for that check itself to not revert.
+[profile.default]
+src = "contracts/src"
+out = "contracts/out"
+libs = ["contracts/lib"]
+test = "contracts/test"
+script = "contracts/script"
+solc = "0.8.24"
+optimizer = true
+optimizer_runs = 200
+evm_version = "cancun"
+fs_permissions = [
+    { access = "read", path = "./test" },
+    { access = "read", path = "./contracts/test" },
+    { access = "read", path = "./offchain" },
+]
+remappings = [
+    "forge-std/=contracts/lib/forge-std/src/",
+    "@openzeppelin/contracts/=contracts/lib/openzeppelin-contracts/contracts/",
+]
+
+[rpc_endpoints]
+gnosis = "${RPC_GNOSIS}"
