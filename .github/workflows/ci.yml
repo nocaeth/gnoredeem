@@ -1,5 +1,9 @@
 name: CI
-on: [push, pull_request]
+
+on:
+  push:
+  pull_request:
+
 # Supersede stale runs on a ref — but never cancel the post-merge run on main; for a
 # repo without branch protection it may be the only gate that commit ever gets.
 concurrency:
