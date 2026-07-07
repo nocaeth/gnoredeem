@@ -1,0 +1,15 @@
+services:
+  gnoredeem-web:
+    image: caddy:2.8-alpine
+    container_name: gnoredeem-web
+    restart: unless-stopped
+    volumes:
+      - ../web/dist:/srv:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      - internal
+
+networks:
+  internal:
+    name: gnosis-dashboard_internal
+    external: true
