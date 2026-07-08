@@ -16,9 +16,11 @@ export const GNOSIS_CHAIN_ID = 100 as const
 export const GNOSIS_RPC: string =
   import.meta.env.VITE_GNOSIS_RPC ?? 'https://rpc.gnosischain.com'
 
-/** WalletConnect Cloud project id. Injected wallets work without it. */
+/** WalletConnect Cloud project id (public — ships in the client bundle). Injected
+ * wallets work without it. Baked in so no build-time/hosting env var is required;
+ * VITE_WALLETCONNECT_PROJECT_ID still overrides if set. */
 export const WALLETCONNECT_PROJECT_ID: string =
-  import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? 'YOUR_WALLETCONNECT_PROJECT_ID'
+  import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? 'd35757c48cb097dc20bb0abd5a72e775'
 
 // ── Token addresses (verified on Gnosis Chain, chainId 100) ──────────────────
 export const GNO_ADDRESS: Address = '0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb'
