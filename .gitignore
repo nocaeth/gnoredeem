@@ -12,3 +12,8 @@ node_modules/
 # OS / editor
 .DS_Store
 *.log
+
+# Preview pipeline artifacts (fork-derived, window may still be open — never root-safe)
+offchain/preview-deposits.json
+offchain/build-config.json
+offchain/merkle-preview.json

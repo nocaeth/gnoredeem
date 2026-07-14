@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "build-merkle": "bun build-merkle.ts",
-    "fetch-deposits": "bun fetch-deposits.ts"
+    "fetch-deposits": "bun fetch-deposits.ts",
+    "preview-deposits": "bun preview-deposits.ts",
+    "treasury-nav": "bun treasury-nav.ts",
+    "preview": "bun preview-deposits.ts preview-deposits.json && bun treasury-nav.ts preview-deposits.json build-config.json && bun build-merkle.ts build-config.json merkle-preview.json"
   },
   "dependencies": {
     "@openzeppelin/merkle-tree": "^1.0.8",

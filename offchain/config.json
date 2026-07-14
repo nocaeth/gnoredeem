@@ -1,0 +1,21 @@
+{
+  "_comment": "Deployment constants for the GIP-151 redemption pipeline. Edit this file to move from the preview fork to production — the scripts read it, nothing is hardcoded. RPC URLs are NOT here: they live in .env (the Tenderly fork URL is a credential). See config.ts for the validation rules.",
+
+  "chainId": 100,
+
+  "_depositContract": "Deployed RedemptionDeposit. gno/osgno/safe/osgnoRate/deadline are read FROM it — never restated here, so they cannot drift from chain.",
+  "depositContract": "0xB53e4a513C1fbb11a66Da851643126D933489C4D",
+
+  "_deployBlock": "Block the deposit contract was deployed at — where the Deposited event scan starts. Too high silently drops early deposits (the totalDeposited reconciliation catches it and aborts).",
+  "deployBlock": "47011542",
+
+  "_logStep": "getLogs range per request. Public Gnosis RPCs allow 10000; Tenderly virtual RPCs reject anything above ~1000. Override with LOG_STEP env.",
+  "logStep": 1000,
+
+  "_payoutTokens": "THE ASSETS TO DISTRIBUTE. The Safe is funded with exactly the amounts to hand out, so each token's FULL Safe balance becomes its basket leg, split pro-rata by deposit stake. A token the Safe holds that is NOT listed here is distributed to NOBODY — it stays in the Safe and depositors are under-paid. Addresses are verified on-chain at runtime (symbol + decimals must match) so a wrong address throws instead of silently contributing a zero balance. GNO/osGNO must never be listed: the Safe holds them because deposits are forwarded to it, so they ARE the deposits, not the proceeds.",
+  "payoutTokens": [
+    { "symbol": "WXDAI", "address": "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d" },
+    { "symbol": "WETH", "address": "0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1" },
+    { "symbol": "SAFE", "address": "0x4d18815D14fe5c3304e87B3FA18318baa5c23820" }
+  ]
+}
