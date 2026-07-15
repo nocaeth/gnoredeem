@@ -37,8 +37,10 @@ import {RedemptionDeposit} from "../src/RedemptionDeposit.sol";
 ///
 /// @dev    Usage:
 ///           MANIFEST_PATH=../offchain/merkle-out.json \
+///           EXPECTED_DEPOSIT_CONTRACT=0x<deposit> \
 ///           forge script script/DeployDistributor.s.sol:DeployDistributor --rpc-url $RPC_GNOSIS --broadcast --account <acct>
-///         Then transfer EXACTLY payoutTotals from the Safe (the script prints them) and call activate().
+///         Then, from the Safe, APPROVE the distributor for EXACTLY payoutTotals of each token (the
+///         script prints them) and call activate(). The basket stays in the Safe; claim() pulls it.
 contract DeployDistributor is Script {
     using stdJson for string;
 
@@ -49,30 +51,46 @@ contract DeployDistributor is Script {
         uint256[] totals;
         uint256 holderCount;
         address depositContract;
-        address safe;
     }
 
     function run() external returns (RedemptionDistributor) {
-        // No default: a fallback to a checked-in sample would let an operator deploy a fixture root to
-        // mainnet. MANIFEST_PATH must be passed explicitly.
+        // No defaults: a fallback to a checked-in sample would let an operator deploy a fixture root to
+        // mainnet, and a defaulted deposit address would defeat the pin below. Both must be explicit.
         string memory path = vm.envOr("MANIFEST_PATH", string(""));
         require(bytes(path).length > 0, "MANIFEST_PATH unset - pass the build-merkle output explicitly");
-        return deployFrom(path);
+        address expectedDeposit = vm.envOr("EXPECTED_DEPOSIT_CONTRACT", address(0));
+        require(expectedDeposit != address(0), "EXPECTED_DEPOSIT_CONTRACT unset - pass the deposit address explicitly");
+        return deployFrom(path, expectedDeposit);
     }
 
-    /// @notice The deploy, with the manifest path passed explicitly. `run()` is the CLI wrapper.
+    /// @notice The deploy, with the manifest path and expected deposit contract passed explicitly.
+    ///         `run()` is the CLI wrapper.
+    /// @param  expectedDeposit The deposit contract the operator intends to bind to. The manifest names
+    ///         a deposit contract, but a manifest is operator-supplied; pinning it here means a swapped
+    ///         provenance.depositContract (which would otherwise silently re-anchor every rate/total/safe
+    ///         check to an attacker-chosen contract) fails the deploy instead.
     /// @dev    Separate from run() so tests can drive it without vm.setEnv — forge runs test functions
     ///         in parallel threads that share process env, so an env-passed path races between tests.
-    function deployFrom(string memory path) public returns (RedemptionDistributor dist) {
+    function deployFrom(string memory path, address expectedDeposit) public returns (RedemptionDistributor dist) {
         require(block.chainid == 100, "not Gnosis Chain (expected 100)");
         string memory json = vm.readFile(path);
 
         Manifest memory m = _readManifest(json);
 
+        // Pin BEFORE any dep.* read: every downstream check trusts the deposit contract as the authority,
+        // so it must be the one the operator vouched for, not one the manifest chose.
+        require(m.depositContract == expectedDeposit, "provenance.depositContract != expected - refusing");
+
+        // The funding source is the deposit contract's immutable `safe`, not a manifest field: deposits
+        // are forwarded there and the payout basket is drawn from that same Safe. Reading it from chain
+        // (rather than trusting provenance.treasurySafe) is what lets a production manifest — which does
+        // not carry treasurySafe — deploy.
+        address safe = RedemptionDeposit(m.depositContract).safe();
+
         console2.log("chainid ", block.chainid);
         console2.log("manifest", path);
         console2.log("deposit ", m.depositContract);
-        console2.log("safe    ", m.safe);
+        console2.log("safe    ", safe);
         console2.logBytes32(m.root);
 
         // Bind the manifest to chain BEFORE deploying. Order matters: the frozen rate and the deposit
@@ -80,23 +98,27 @@ contract DeployDistributor is Script {
         _verifyAgainstDepositContract(json, m);
         _verifyWindowClosed(json, m);
         _verifyRootAndConservation(json, m);
-        _verifySolvency(m);
+        _verifySolvency(m, safe);
 
         vm.startBroadcast();
-        dist = new RedemptionDistributor(m.root, m.tokens, m.totals);
+        dist = new RedemptionDistributor(m.root, m.tokens, m.totals, safe);
         vm.stopBroadcast();
 
         console2.log("RedemptionDistributor", address(dist));
-        _assertMatchesManifest(dist, m);
+        _assertMatchesManifest(dist, m, safe);
 
         console2.log("");
         console2.log("all pre-deploy checks: PASS");
-        console2.log("fund by transferring EXACTLY these amounts from the Safe to the distributor:");
+        console2.log("fund by having the Safe APPROVE the distributor for EXACTLY these amounts (the");
+        console2.log("basket stays in the Safe; claim() pulls it via transferFrom):");
         for (uint256 i = 0; i < m.tokens.length; i++) {
-            console2.log("  symbol", m.symbols[i]);
-            console2.log("  token ", m.tokens[i]);
-            console2.log("  amount", m.totals[i]);
+            console2.log("  symbol ", m.symbols[i]);
+            console2.log("  token  ", m.tokens[i]);
+            console2.log("  approve", m.totals[i]);
         }
+        console2.log("Safe/spender:");
+        console2.log("  owner  ", safe);
+        console2.log("  spender", address(dist));
         console2.log("then call activate()");
     }
 
@@ -119,7 +141,8 @@ contract DeployDistributor is Script {
         // refuse — an unbindable manifest is exactly the hand-typed basket this script exists to stop.
         require(vm.keyExistsJson(json, ".provenance"), "manifest has no provenance - not built from chain; refusing");
         m.depositContract = json.readAddress(".provenance.depositContract");
-        m.safe = json.readAddress(".provenance.treasurySafe");
+        // The funding Safe is NOT read here: it is the deposit contract's on-chain immutable (read in
+        // deployFrom). A production fetch-deposits manifest carries no `treasurySafe` field at all.
     }
 
     // ─── 1 + 2: frozen rate, deposit set, token identities ───────────────────────
@@ -152,10 +175,6 @@ contract DeployDistributor is Script {
             vm.parseUint(json.readString(".provenance.totalDeposited.osgno")) == dep.totalDeposited(osgno),
             "totalDeposited(osGNO) != on-chain"
         );
-
-        // Deposits are forwarded to `safe`, and the payout basket is drawn from that same Safe's
-        // balances — so the funding source is an immutable of the deposit contract, not a JSON field.
-        require(m.safe == dep.safe(), "provenance.treasurySafe != deposit contract's safe immutable");
 
         // A payout token can never be GNO/osGNO: those sit in the Safe only because deposits are
         // forwarded there, so paying them out would hand depositors back their own stake.
@@ -224,9 +243,18 @@ contract DeployDistributor is Script {
             }
         }
 
+        // The loop trusts holderCount as the leaf count, but the manifest array is operator-supplied and
+        // may list MORE leaves than holderCount. Those extra leaves are never summed into conservation,
+        // yet — carrying the same root — they are fully claimable, so they drain the Safe out from under
+        // honest late claimers. Assert the array ends exactly at holderCount.
+        require(
+            !vm.keyExistsJson(json, string.concat(".manifest[", vm.toString(m.holderCount), "].holder")),
+            "manifest lists more leaves than holderCount"
+        );
+
         // Conservation: what the contract commits to pay must equal what the tree actually pays. If
-        // totals > sum(leaves), the Safe must over-fund or activate() reverts; if totals < sum(leaves),
-        // the last claimers find the contract drained and their claim reverts forever.
+        // totals > sum(leaves), the Safe must over-approve or activate() reverts; if totals < sum(leaves),
+        // the last claimers find the Safe's approval drained and their claim reverts.
         for (uint256 i = 0; i < n; i++) {
             require(summed[i] == m.totals[i], "sum of leaves != committed payoutTotal");
         }
@@ -235,19 +263,21 @@ contract DeployDistributor is Script {
 
     // ─── 6: the Safe can actually fund what we are about to commit to ────────────
 
-    function _verifySolvency(Manifest memory m) internal view {
+    function _verifySolvency(Manifest memory m, address safe) internal view {
         for (uint256 i = 0; i < m.tokens.length; i++) {
-            // activate() reverts until the distributor holds >= every committed total. If the Safe
-            // cannot cover a leg, the deploy commits to a basket that can never be funded and EVERY
-            // claim is bricked — catch it here, before the immutable totals are written.
-            require(IERC20(m.tokens[i]).balanceOf(m.safe) >= m.totals[i], "Safe balance < committed payoutTotal - unfundable");
+            // activate() reverts until the Safe holds >= every committed total. If the Safe cannot cover
+            // a leg, the deploy commits to a basket that can never be funded and EVERY claim is bricked —
+            // catch it here, before the immutable totals are written. Allowance is NOT checked: the Safe
+            // approves the distributor AFTER deploy (it doesn't exist yet), so only balance is assertable.
+            require(IERC20(m.tokens[i]).balanceOf(safe) >= m.totals[i], "Safe balance < committed payoutTotal - unfundable");
         }
     }
 
     // ─── post-deploy: the immutables really are what we committed ────────────────
 
-    function _assertMatchesManifest(RedemptionDistributor dist, Manifest memory m) internal view {
+    function _assertMatchesManifest(RedemptionDistributor dist, Manifest memory m, address safe) internal view {
         require(dist.merkleRoot() == m.root, "root mismatch");
+        require(dist.safe() == safe, "safe mismatch");
         address[] memory onchain = dist.payoutTokens();
         require(onchain.length == m.tokens.length, "token count mismatch");
         for (uint256 i = 0; i < m.tokens.length; i++) {

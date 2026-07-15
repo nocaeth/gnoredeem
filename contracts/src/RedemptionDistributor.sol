@@ -11,29 +11,38 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 ///         that holder's full multi-asset entitlement, so a single claim() transfers the ENTIRE basket
 ///         (all payout tokens) in one transaction.
 /// @dev    Deliberately minimal, admin-free, immutable — same philosophy as RedemptionDeposit:
-///         - The Merkle root, the canonical payout-token set, and the per-token totals are committed at
-///           deploy (and published in the claim manifest). No setRoot, no owner, no upgrade, no pause.
-///         - The redemption Safe funds it by transferring the assembled basket in. Anyone may then call
-///           activate(), which opens claims ONLY once the contract holds >= every committed total — the
-///           solvency gate: it can never go live unable to pay every leaf, so early claimers cannot
-///           strand late ones.
+///         - The Merkle root, the canonical payout-token set, the per-token totals, and the funding
+///           `safe` are committed at deploy (and published in the claim manifest). No setRoot, no owner,
+///           no upgrade, no pause.
+///         - SAFE CUSTODY. The basket never enters this contract. It stays in the redemption Safe, which
+///           funds the distributor by APPROVING it (ERC20 allowance) for each committed total; claim()
+///           then pulls the holder's legs Safe -> holder via transferFrom. Anyone may call activate(),
+///           which opens claims ONLY once the Safe both holds >= and has approved >= every committed
+///           total. Because funds stay in the Safe, the Safe (GnosisDAO multisig) keeps custody for
+///           issue/emergency handling: setting a token's allowance to 0 halts claims of that token,
+///           re-approving resumes them — no distributor redeploy, no admin role here.
 ///         - No claim deadline. There is intentionally NO sweep/recovery: an unclaimed basket stays
-///           claimable forever. A residual sunset is a governance decision and is deliberately NOT built
-///           in here (adding it would require an admin/timelock — out of scope, keep it trustless).
+///           claimable forever (it simply remains in the Safe). A residual sunset is a governance
+///           decision and is deliberately NOT built in here (adding it would require an admin/timelock —
+///           out of scope, keep it trustless).
 ///
 ///         Payout-token assumptions & accepted trade-offs — the basket MUST be curated to honor these;
 ///         NONE are enforced on-chain:
 ///         - STANDARD ERC20s ONLY. Each payout token is assumed standard: non-fee-on-transfer,
-///           non-rebasing, and with no clawback/burn of this contract's balance. activate()'s solvency
-///           check is evaluated once, so a token whose balance can shrink after activation (negative
-///           rebase, admin clawback/burn) could leave the last claimers unpayable.
+///           non-rebasing, honoring standard allowance/transferFrom semantics.
+///         - ACTIVATE IS A POINT-IN-TIME READINESS CHECK, NOT A DURABLE SOLVENCY GUARANTEE. activate()
+///           checks the Safe's balance and allowance once, at that instant; both can drop afterward (the
+///           intended emergency lever, or an ordinary Safe spend), reverting affected claims until the
+///           Safe restores balance/approval. This weaker guarantee — versus escrowing the basket in the
+///           contract — is the deliberate price of leaving custody with the Safe.
 ///         - ATOMIC, ALL-OR-NOTHING CLAIM (intentional). claim() pays a holder's whole basket in one call
 ///           and succeeds only if EVERY leg transfers. If any single payout token blocks transfer to a
-///           holder (per-recipient blocklist/allowlist, pause, or non-transferable), that holder can
-///           claim NO leg — including the healthy ones — and, with no sweep, those funds are stranded
-///           permanently. This is deliberate: one leaf = one atomic basket transfer keeps claims minimal
-///           and the contract trustless. It is a curation requirement — include only tokens that cannot
-///           restrict transfers to a holder (in particular, none with a governance transfer switch).
+///           holder (per-recipient blocklist/allowlist, pause, or non-transferable) — or the Safe lacks
+///           balance/allowance for that leg — that holder can claim NO leg, including the healthy ones,
+///           until the condition clears. This is deliberate: one leaf = one atomic basket transfer keeps
+///           claims minimal and the contract trustless. It is a curation requirement — include only
+///           tokens that cannot restrict transfers to a holder (in particular, none with a governance
+///           transfer switch).
 ///         - SINGLE-USE ROOT (no domain separation). The leaf commits to (account, amounts) only — no
 ///           chainId, no contract address — so a published proof is valid against ANY distributor
 ///           carrying the same root. Deploy a given root to EXACTLY ONE distributor; never reuse it.
@@ -60,13 +69,17 @@ contract RedemptionDistributor {
     /// @notice Merkle root over all holder leaves. Immutable; published with the claim manifest.
     bytes32 public immutable merkleRoot;
 
+    /// @notice The redemption Safe that custodies the basket. claim() pulls each leg from here via
+    ///         transferFrom, so the Safe must keep an allowance to this contract for every payout token.
+    address public immutable safe;
+
     /// @notice Canonical, ordered payout-token set. Leaf `amounts` are aligned to this order.
     address[] private _payoutTokens;
     /// @notice Committed total to be distributed per payout token (sum of all leaves for that token).
     mapping(address token => uint256 total) public payoutTotal;
     /// @notice Whether an account has already claimed its basket.
     mapping(address account => bool claimed) public hasClaimed;
-    /// @notice Claims are only open once funded to >= every committed total.
+    /// @notice Claims are only open once the Safe holds and has approved >= every committed total.
     bool public activated;
 
     event Activated();
@@ -78,13 +91,16 @@ contract RedemptionDistributor {
     error InvalidProof();
     error LengthMismatch();
     error UnderFunded(address token);
+    error NotApproved(address token);
 
-    constructor(bytes32 merkleRoot_, address[] memory tokens, uint256[] memory totals) {
+    constructor(bytes32 merkleRoot_, address[] memory tokens, uint256[] memory totals, address safe_) {
         require(merkleRoot_ != bytes32(0), "zero root");
+        require(safe_ != address(0), "zero safe");
         require(tokens.length > 0, "empty basket");
         require(tokens.length <= MAX_PAYOUT_TOKENS, "too many tokens");
         require(tokens.length == totals.length, "length mismatch");
         merkleRoot = merkleRoot_;
+        safe = safe_;
         for (uint256 i = 0; i < tokens.length; i++) {
             address t = tokens[i];
             require(t != address(0), "zero token");
@@ -100,16 +116,21 @@ contract RedemptionDistributor {
         return _payoutTokens;
     }
 
-    /// @notice Open claims. Permissionless, but reverts unless the contract already holds the full
-    ///         committed basket for every token — so claims can never open under-funded.
-    /// @dev    Solvency is checked once, here; it holds for the lifetime of claims only under the
-    ///         standard-ERC20 assumption documented in the contract NatSpec.
+    /// @notice Open claims. Permissionless, but reverts unless the Safe both holds and has approved this
+    ///         contract for the full committed basket of every token — so claims cannot open before the
+    ///         Safe is funded and approved.
+    /// @dev    A point-in-time readiness check, not a durable guarantee: the Safe's balance and allowance
+    ///         are read once, here, and can drop afterward (see the contract NatSpec). `UnderFunded` and
+    ///         `NotApproved` are distinct so ops can tell "Safe doesn't hold enough" from "Safe holds it
+    ///         but hasn't approved".
     function activate() external {
         if (activated) revert AlreadyActivated();
         uint256 n = _payoutTokens.length;
         for (uint256 i = 0; i < n; i++) {
             address t = _payoutTokens[i];
-            if (IERC20(t).balanceOf(address(this)) < payoutTotal[t]) revert UnderFunded(t);
+            uint256 total = payoutTotal[t];
+            if (IERC20(t).balanceOf(safe) < total) revert UnderFunded(t);
+            if (IERC20(t).allowance(safe, address(this)) < total) revert NotApproved(t);
         }
         activated = true;
         emit Activated();
@@ -120,8 +141,9 @@ contract RedemptionDistributor {
     /// @param amounts Per-token entitlements, aligned to payoutTokens().
     /// @param proof Merkle proof of the leaf against `merkleRoot`.
     /// @dev    Atomic: pays the WHOLE basket and marks `account` claimed only if every leg transfers; a
-    ///         payout token that blocks transfer to `account` makes the entire basket unclaimable (see
-    ///         the payout-token assumptions in the contract NatSpec). Zero-amount legs are skipped.
+    ///         payout token that blocks transfer to `account`, or a Safe balance/allowance shortfall on
+    ///         any leg, makes the entire basket unclaimable until the condition clears (see the
+    ///         payout-token assumptions in the contract NatSpec). Zero-amount legs are skipped.
     function claim(address account, uint256[] calldata amounts, bytes32[] calldata proof) external {
         if (!activated) revert NotActivated();
         if (hasClaimed[account]) revert AlreadyClaimed();
@@ -131,12 +153,12 @@ contract RedemptionDistributor {
         bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(account, amounts))));
         if (!MerkleProof.verifyCalldata(proof, merkleRoot, leaf)) revert InvalidProof();
 
-        // Effects before interactions (CEI): mark claimed, then transfer the basket.
+        // Effects before interactions (CEI): mark claimed, then pull the basket from the Safe.
         hasClaimed[account] = true;
 
         for (uint256 i = 0; i < n; i++) {
             uint256 amt = amounts[i];
-            if (amt > 0) IERC20(_payoutTokens[i]).safeTransfer(account, amt);
+            if (amt > 0) IERC20(_payoutTokens[i]).safeTransferFrom(safe, account, amt);
         }
 
         emit Claimed(account, amounts);

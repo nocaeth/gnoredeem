@@ -8,6 +8,7 @@ contract MockERC20 {
     string public symbol;
     uint8 public constant decimals = 18;
     mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
 
     constructor(string memory s) {
         symbol = s;
@@ -22,12 +23,25 @@ contract MockERC20 {
         balanceOf[to] += amt;
         return true;
     }
+
+    function approve(address spender, uint256 amt) external returns (bool) {
+        allowance[msg.sender][spender] = amt;
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amt) external returns (bool) {
+        allowance[from][msg.sender] -= amt; // reverts (underflow) if under-approved
+        balanceOf[from] -= amt; // reverts (underflow) if under-funded
+        balanceOf[to] += amt;
+        return true;
+    }
 }
 
 contract RedemptionDistributorTest is Test {
     MockERC20 internal A;
     MockERC20 internal B;
 
+    address internal safe = address(0x5AFE);
     address internal h0 = address(0xA0);
     address internal h1 = address(0xA1);
     address internal h2 = address(0xA2);
@@ -96,12 +110,18 @@ contract RedemptionDistributorTest is Test {
         uint256[] memory tot = new uint256[](2);
         tot[0] = TOTAL_A;
         tot[1] = TOTAL_B;
-        d = new RedemptionDistributor(root, tk, tot);
+        d = new RedemptionDistributor(root, tk, tot, safe);
     }
 
+    // Safe custody: mint the basket to the Safe and approve the distributor to pull it. The distributor
+    // never holds the tokens; claim() pulls Safe -> holder via transferFrom.
     function _fund(RedemptionDistributor d) internal {
-        A.mint(address(d), TOTAL_A);
-        B.mint(address(d), TOTAL_B);
+        A.mint(safe, TOTAL_A);
+        B.mint(safe, TOTAL_B);
+        vm.startPrank(safe);
+        A.approve(address(d), TOTAL_A);
+        B.approve(address(d), TOTAL_B);
+        vm.stopPrank();
     }
 
     function _ready() internal returns (RedemptionDistributor d) {
@@ -125,8 +145,11 @@ contract RedemptionDistributorTest is Test {
         d.claim(h1, amtOf[h1], proofOf[h1]);
         d.claim(h2, amtOf[h2], proofOf[h2]);
         d.claim(h3, amtOf[h3], proofOf[h3]);
-        assertEq(A.balanceOf(address(d)), 0, "A drained");
-        assertEq(B.balanceOf(address(d)), 0, "B drained");
+        // Safe custody: the Safe drains to exactly zero; the distributor never held anything.
+        assertEq(A.balanceOf(safe), 0, "A drained from Safe");
+        assertEq(B.balanceOf(safe), 0, "B drained from Safe");
+        assertEq(A.balanceOf(address(d)), 0, "distributor never custodies A");
+        assertEq(B.balanceOf(address(d)), 0, "distributor never custodies B");
         assertEq(A.balanceOf(h3), 400);
         assertEq(B.balanceOf(h3), 40);
     }
@@ -139,6 +162,38 @@ contract RedemptionDistributorTest is Test {
         assertEq(A.balanceOf(address(0xBEEF)), 0);
     }
 
+    // ── Safe custody ───────────────────────────────────────────────────────────
+    function test_claim_pullsFromSafe_notDistributor() public {
+        RedemptionDistributor d = _ready();
+        d.claim(h0, amtOf[h0], proofOf[h0]);
+        // Holder paid, Safe debited by exactly the basket, distributor never touched the tokens.
+        assertEq(A.balanceOf(h0), 100, "A to h0");
+        assertEq(B.balanceOf(h0), 10, "B to h0");
+        assertEq(A.balanceOf(safe), TOTAL_A - 100, "Safe debited A");
+        assertEq(B.balanceOf(safe), TOTAL_B - 10, "Safe debited B");
+        assertEq(A.balanceOf(address(d)), 0, "distributor holds no A");
+    }
+
+    // Emergency lever: after activation the Safe revokes a token's allowance to halt claims, then
+    // re-approves to resume them — no distributor call in between (activated latches).
+    function test_emergencyRevoke_haltsThenResumesClaims() public {
+        RedemptionDistributor d = _ready();
+
+        vm.prank(safe);
+        A.approve(address(d), 0); // Safe pulls the emergency brake on token A
+
+        vm.expectRevert(); // A's leg can no longer be pulled -> whole atomic basket reverts
+        d.claim(h0, amtOf[h0], proofOf[h0]);
+        assertFalse(d.hasClaimed(h0), "claim not finalized while halted");
+
+        vm.prank(safe);
+        A.approve(address(d), TOTAL_A); // re-approve resumes claims with no activate() call
+
+        d.claim(h0, amtOf[h0], proofOf[h0]);
+        assertEq(A.balanceOf(h0), 100, "claim succeeds after re-approval");
+        assertTrue(d.hasClaimed(h0));
+    }
+
     // ── guards ───────────────────────────────────────────────────────────────
     function test_claim_revertsBeforeActivate() public {
         RedemptionDistributor d = _deploy();
@@ -149,9 +204,25 @@ contract RedemptionDistributorTest is Test {
 
     function test_activate_revertsWhenUnderFunded() public {
         RedemptionDistributor d = _deploy();
-        A.mint(address(d), TOTAL_A - 1); // A short by 1
-        B.mint(address(d), TOTAL_B);
+        A.mint(safe, TOTAL_A - 1); // Safe holds A short by 1
+        B.mint(safe, TOTAL_B);
+        vm.startPrank(safe); // fully approved, so the balance shortfall is what trips
+        A.approve(address(d), TOTAL_A);
+        B.approve(address(d), TOTAL_B);
+        vm.stopPrank();
         vm.expectRevert(abi.encodeWithSelector(RedemptionDistributor.UnderFunded.selector, address(A)));
+        d.activate();
+    }
+
+    function test_activate_revertsWhenNotApproved() public {
+        RedemptionDistributor d = _deploy();
+        A.mint(safe, TOTAL_A); // Safe holds the full basket ...
+        B.mint(safe, TOTAL_B);
+        vm.startPrank(safe); // ... but A is under-approved by 1
+        A.approve(address(d), TOTAL_A - 1);
+        B.approve(address(d), TOTAL_B);
+        vm.stopPrank();
+        vm.expectRevert(abi.encodeWithSelector(RedemptionDistributor.NotApproved.selector, address(A)));
         d.activate();
     }
 
@@ -196,7 +267,7 @@ contract RedemptionDistributorTest is Test {
         uint256[] memory tot = new uint256[](1);
         tot[0] = TOTAL_A;
         vm.expectRevert(bytes("length mismatch"));
-        new RedemptionDistributor(root, tk, tot);
+        new RedemptionDistributor(root, tk, tot, safe);
     }
 
     function test_ctor_revertsOnTooManyTokens() public {
@@ -208,7 +279,7 @@ contract RedemptionDistributorTest is Test {
             tot[i] = 1;
         }
         vm.expectRevert(bytes("too many tokens"));
-        new RedemptionDistributor(root, tk, tot);
+        new RedemptionDistributor(root, tk, tot, safe);
     }
 
     function test_ctor_revertsOnDuplicateToken() public {
@@ -219,7 +290,7 @@ contract RedemptionDistributorTest is Test {
         tot[0] = 1;
         tot[1] = 1;
         vm.expectRevert(bytes("duplicate token"));
-        new RedemptionDistributor(root, tk, tot);
+        new RedemptionDistributor(root, tk, tot, safe);
     }
 
     function test_ctor_revertsOnZeroTotal() public {
@@ -230,6 +301,6 @@ contract RedemptionDistributorTest is Test {
         tot[0] = TOTAL_A;
         tot[1] = 0;
         vm.expectRevert(bytes("zero total"));
-        new RedemptionDistributor(root, tk, tot);
+        new RedemptionDistributor(root, tk, tot, safe);
     }
 }

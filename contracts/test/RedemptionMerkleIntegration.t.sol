@@ -13,6 +13,7 @@ import {MockERC20} from "./RedemptionDistributor.t.sol";
 contract RedemptionMerkleIntegrationTest is Test {
     bytes32 constant ROOT = 0xadd678621aad1bac3f5c07807c66de2621f6a4fd96fdf0382f65d6b507f766ad;
     address constant HOLDER = address(0xA0); // first manifest holder (0x..a0)
+    address constant SAFE = address(0x5AFE);
 
     function test_offchainProof_verifiesOnchain() public {
         MockERC20 usdc = new MockERC20("USDC.e");
@@ -25,9 +26,14 @@ contract RedemptionMerkleIntegrationTest is Test {
         totals[0] = 999; // payoutTotals from the builder
         totals[1] = 9;
 
-        RedemptionDistributor d = new RedemptionDistributor(ROOT, tokens, totals);
-        usdc.mint(address(d), 999);
-        cow.mint(address(d), 9);
+        RedemptionDistributor d = new RedemptionDistributor(ROOT, tokens, totals, SAFE);
+        // Safe custody: the basket lives in the Safe, which approves the distributor to pull it.
+        usdc.mint(SAFE, 999);
+        cow.mint(SAFE, 9);
+        vm.startPrank(SAFE);
+        usdc.approve(address(d), 999);
+        cow.approve(address(d), 9);
+        vm.stopPrank();
         d.activate();
 
         uint256[] memory amounts = new uint256[](2);
