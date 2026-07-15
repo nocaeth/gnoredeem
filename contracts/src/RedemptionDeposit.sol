@@ -7,6 +7,7 @@ interface IERC20 {
 }
 
 /// @title  RedemptionDeposit (GIP-151)
+/// @notice GIP-151 proposal (Snapshot): https://snapshot.org/#/s:gnosis.eth/proposal/0x657fbf8892200d24e887c68245cee73b59c466394192be1c10673b39814c74c4
 /// @notice One-time, opt-in deposit router for the GnosisDAO pro-rata treasury redemption.
 ///         During the deposit window, GNO or osGNO holders opt in by depositing either token;
 ///         deposits are forwarded immediately to the GnosisDAO redemption Safe. Per-holder amounts
