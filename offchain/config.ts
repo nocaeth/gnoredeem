@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs'
 // in one tx, so an oversized basket risks a gas-bricked claim.
 export const MAX_PAYOUT_TOKENS = 10
 
-export type PayoutToken = { symbol: string; address: Address }
+export type PayoutToken = { symbol: string; address: Address; decimals: number }
 export type Config = {
   chainId: number
   depositContract: Address
@@ -43,10 +43,15 @@ function loadConfig(): Config {
 
   const seen = new Set<string>()
   const payoutTokens: PayoutToken[] = raw.payoutTokens.map((t: unknown, i: number) => {
-    const entry = t as { symbol?: unknown; address?: unknown }
+    const entry = t as { symbol?: unknown; address?: unknown; decimals?: unknown }
     if (typeof entry.symbol !== 'string' || entry.symbol.length === 0)
       fail(`payoutTokens[${i}] missing symbol`)
     if (typeof entry.address !== 'string') fail(`payoutTokens[${i}] (${entry.symbol}) missing address`)
+
+    // decimals is pinned in config and asserted against chain by verify-tokens.ts — an address swapped
+    // for a same-symbol token of different precision is caught before it can mis-scale a payout.
+    if (typeof entry.decimals !== 'number' || !Number.isInteger(entry.decimals) || entry.decimals < 0 || entry.decimals > 255)
+      fail(`payoutTokens[${i}] (${entry.symbol}) decimals must be an integer in [0,255]`)
 
     // getAddress rejects a bad checksum AND normalizes casing, so a hand-typed address that is
     // subtly wrong fails here rather than reading as a zero balance later.
@@ -63,7 +68,7 @@ function loadConfig(): Config {
     if (seen.has(address.toLowerCase())) fail(`duplicate payout token ${address} (${entry.symbol})`)
     seen.add(address.toLowerCase())
 
-    return { symbol: entry.symbol, address }
+    return { symbol: entry.symbol, address, decimals: entry.decimals }
   })
 
   return {

@@ -49,7 +49,7 @@ export async function readBasket(
     if (excluded.has(token.toLowerCase()))
       throw new Error(`${c.symbol} (${token}) is a deposit token — remove it from payoutTokens`)
 
-    const [symbol, , balance] = (await Promise.all([
+    const [symbol, decimals, balance] = (await Promise.all([
       client.readContract({ address: token, abi: erc20Abi, functionName: 'symbol', blockNumber: opts.blockNumber }),
       client.readContract({ address: token, abi: erc20Abi, functionName: 'decimals', blockNumber: opts.blockNumber }),
       client.readContract({
@@ -61,6 +61,8 @@ export async function readBasket(
       }),
     ])) as [string, number, bigint]
     if (symbol !== c.symbol) throw new Error(`${token}: on-chain symbol "${symbol}" != config symbol "${c.symbol}"`)
+    if (Number(decimals) !== c.decimals)
+      throw new Error(`${token} (${c.symbol}): on-chain decimals ${decimals} != config decimals ${c.decimals}`)
     if (balance === 0n) continue
     basket.push({ token, symbol, total: balance.toString() })
   }

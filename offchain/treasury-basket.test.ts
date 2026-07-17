@@ -36,21 +36,21 @@ function fakeClient(spec: {
 
 test('readBasket returns verified non-zero balances', async () => {
   const client = fakeClient({ tokens: { [WXDAI]: { symbol: 'WXDAI', decimals: 18, balance: 1000n } } })
-  const basket = await readBasket(client, { depositContract: DEPOSIT, payoutTokens: [{ symbol: 'WXDAI', address: WXDAI }] })
+  const basket = await readBasket(client, { depositContract: DEPOSIT, payoutTokens: [{ symbol: 'WXDAI', address: WXDAI, decimals: 18 }] })
   expect(basket).toEqual([{ token: WXDAI, symbol: 'WXDAI', total: '1000' }])
 })
 
 test('readBasket throws when a payout token is a deposit token', async () => {
   const client = fakeClient({ tokens: { [GNO]: { symbol: 'GNO', decimals: 18, balance: 5n } } })
   await expect(
-    readBasket(client, { depositContract: DEPOSIT, payoutTokens: [{ symbol: 'GNO', address: GNO }] }),
+    readBasket(client, { depositContract: DEPOSIT, payoutTokens: [{ symbol: 'GNO', address: GNO, decimals: 18 }] }),
   ).rejects.toThrow(/deposit token/)
 })
 
 test('readBasket throws on an on-chain symbol mismatch', async () => {
   const client = fakeClient({ tokens: { [WXDAI]: { symbol: 'NOPE', decimals: 18, balance: 5n } } })
   await expect(
-    readBasket(client, { depositContract: DEPOSIT, payoutTokens: [{ symbol: 'WXDAI', address: WXDAI }] }),
+    readBasket(client, { depositContract: DEPOSIT, payoutTokens: [{ symbol: 'WXDAI', address: WXDAI, decimals: 18 }] }),
   ).rejects.toThrow(/symbol/)
 })
 
@@ -66,8 +66,8 @@ test('readBasket skips zero-balance tokens but keeps funded ones', async () => {
   const basket = await readBasket(client, {
     depositContract: DEPOSIT,
     payoutTokens: [
-      { symbol: 'WXDAI', address: WXDAI },
-      { symbol: 'WETH', address: WETH },
+      { symbol: 'WXDAI', address: WXDAI, decimals: 18 },
+      { symbol: 'WETH', address: WETH, decimals: 18 },
     ],
   })
   expect(basket).toEqual([{ token: WETH, symbol: 'WETH', total: '42' }])
@@ -76,6 +76,6 @@ test('readBasket skips zero-balance tokens but keeps funded ones', async () => {
 test('readBasket throws when the whole basket is empty', async () => {
   const client = fakeClient({ tokens: { [WXDAI]: { symbol: 'WXDAI', decimals: 18, balance: 0n } } })
   await expect(
-    readBasket(client, { depositContract: DEPOSIT, payoutTokens: [{ symbol: 'WXDAI', address: WXDAI }] }),
+    readBasket(client, { depositContract: DEPOSIT, payoutTokens: [{ symbol: 'WXDAI', address: WXDAI, decimals: 18 }] }),
   ).rejects.toThrow(/empty basket/)
 })

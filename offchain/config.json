@@ -12,10 +12,14 @@
   "_logStep": "getLogs range per request. Public Gnosis RPCs allow 10000; Tenderly virtual RPCs reject anything above ~1000. Override with LOG_STEP env.",
   "logStep": 1000,
 
-  "_payoutTokens": "THE ASSETS TO DISTRIBUTE. The Safe is funded with exactly the amounts to hand out, so each token's FULL Safe balance becomes its basket leg, split pro-rata by deposit stake. A token the Safe holds that is NOT listed here is distributed to NOBODY — it stays in the Safe and depositors are under-paid. Addresses are verified on-chain at runtime (symbol + decimals must match) so a wrong address throws instead of silently contributing a zero balance. GNO/osGNO must never be listed: the Safe holds them because deposits are forwarded to it, so they ARE the deposits, not the proceeds.",
+  "_payoutTokens": "THE ASSETS TO DISTRIBUTE (GIP-151 basket, all on Gnosis chain). The Safe is funded with exactly the amounts to hand out, so each token's FULL Safe balance becomes its basket leg, split pro-rata by deposit stake. A token the Safe holds that is NOT listed here is distributed to NOBODY — it stays in the Safe and depositors are under-paid. Every address + symbol + decimals below was verified on-chain (Gnosis) and is re-asserted at runtime by verify-tokens.ts and when treasury-basket.ts reads the basket, so a wrong address throws instead of silently contributing a zero balance. Symbols are the EXACT on-chain strings (note lowercase 'auraBAL'). GNO (0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb) and osGNO (0xF490c80aAE5f2616d3e3BDa2483E30C4CB21d1A0) must never be listed: the Safe holds them because deposits are forwarded to it, so they ARE the deposits, not the proceeds.",
   "payoutTokens": [
-    { "symbol": "WXDAI", "address": "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d" },
-    { "symbol": "WETH", "address": "0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1" },
-    { "symbol": "SAFE", "address": "0x4d18815D14fe5c3304e87B3FA18318baa5c23820" }
+    { "symbol": "wstETH", "address": "0x6C76971f98945AE98dD7d4DFcA8711ebea946eA6", "decimals": 18 },
+    { "symbol": "WXDAI", "address": "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d", "decimals": 18 },
+    { "symbol": "COW", "address": "0x177127622c4A00F3d409B75571e12cB3c8973d3c", "decimals": 18 },
+    { "symbol": "SAFE", "address": "0x4d18815D14fe5c3304e87B3FA18318baa5c23820", "decimals": 18 },
+    { "symbol": "HOPR", "address": "0xD057604A14982FE8D88c5fC25Aac3267eA142a08", "decimals": 18 },
+    { "symbol": "PNK", "address": "0x37b60f4E9A31A64cCc0024dce7D0fD07eAA0F7B3", "decimals": 18 },
+    { "symbol": "auraBAL", "address": "0x63803B132a59E481920c4c46a981bF45555b0421", "decimals": 18 }
   ]
 }
