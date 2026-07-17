@@ -130,11 +130,15 @@ asset pro-rata, and emit the root, the per-token committed totals, and the per-h
 
 ```bash
 cd offchain
-bun build-merkle.ts build-config.json out.json
+bun build-merkle.ts build-config.json production-manifest.json
 ```
 
-**Produces:** `out.json` — `{ root, payoutTokens, payoutSymbols, payoutTotals, dust, holderCount,
-provenance, manifest[{holder, amounts, proof}] }`.
+> Do **not** write to `out.json` — that is the tracked test fixture pinned by
+> `RedemptionMerkleIntegration.t.sol`. `build-config.json` (gitignored intermediate) and
+> `production-manifest.json` are the production files.
+
+**Produces:** `production-manifest.json` — `{ root, payoutTokens, payoutSymbols, payoutTotals, dust,
+holderCount, provenance, manifest[{holder, amounts, proof}] }`.
 **Expect:** a `root:`, `holders: 92`, and a `total=…  dust=…` line per token.
 **Aborts if:** the config rate ≠ its provenance rate, deposit sums ≠ provenance totals, a basket
 token allocates 0 to everyone (too small), or the basket exceeds `MAX_PAYOUT_TOKENS = 10`.
@@ -154,7 +158,13 @@ requires the Safe to already hold every committed total.
 ```bash
 cd contracts
 # one-time on a fresh clone: make install-contract-deps
-MANIFEST_PATH=../offchain/out.json \
+# Dry-run FIRST (no --broadcast, no key): runs all 6 checks against live chain.
+MANIFEST_PATH=../offchain/production-manifest.json \
+EXPECTED_DEPOSIT_CONTRACT=0xB53e4a513C1fbb11a66Da851643126D933489C4D \
+forge script script/DeployDistributor.s.sol:DeployDistributor --rpc-url "$RPC_GNOSIS"
+
+# Then broadcast for real by adding --broadcast and your wallet:
+MANIFEST_PATH=../offchain/production-manifest.json \
 EXPECTED_DEPOSIT_CONTRACT=0xB53e4a513C1fbb11a66Da851643126D933489C4D \
 forge script script/DeployDistributor.s.sol:DeployDistributor \
   --rpc-url "$RPC_GNOSIS" --broadcast --account <deployer-account>
