@@ -165,6 +165,9 @@ Vite + React 19 + wagmi v2 + RainbowKit, Gnosis Chain only.
    Safe **approves** the distributor for the committed basket; anyone calls `activate()`.
 5. Holders claim their basket through the web app; each claim pulls the basket Safe → holder.
 
+For the exact operator commands from the captured deposit data through deploying the distributor,
+see [DEPLOY-RUNBOOK.md](DEPLOY-RUNBOOK.md).
+
 ## Design properties
 
 - **Immutable & admin-free on-chain** — no owner, upgrade, or pause on either contract.

@@ -13,6 +13,11 @@ node_modules/
 .DS_Store
 *.log
 
+# Agent tooling / scaffolding
+.claude/
+.codex/
+docs/superpowers/
+
 # Preview pipeline artifacts (fork-derived, window may still be open — never root-safe)
 offchain/preview-deposits.json
 offchain/build-config.json
