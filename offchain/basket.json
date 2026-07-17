@@ -1,0 +1,37 @@
+[
+  {
+    "token": "0x6C76971f98945AE98dD7d4DFcA8711ebea946eA6",
+    "symbol": "wstETH",
+    "total": "5034998950152022839396"
+  },
+  {
+    "token": "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
+    "symbol": "WXDAI",
+    "total": "6408226908101468565652824"
+  },
+  {
+    "token": "0x177127622c4A00F3d409B75571e12cB3c8973d3c",
+    "symbol": "COW",
+    "total": "8489602920664131059369506"
+  },
+  {
+    "token": "0x4d18815D14fe5c3304e87B3FA18318baa5c23820",
+    "symbol": "SAFE",
+    "total": "13462802264721817301248684"
+  },
+  {
+    "token": "0xD057604A14982FE8D88c5fC25Aac3267eA142a08",
+    "symbol": "HOPR",
+    "total": "21387268896288484014950101"
+  },
+  {
+    "token": "0x37b60f4E9A31A64cCc0024dce7D0fD07eAA0F7B3",
+    "symbol": "PNK",
+    "total": "3280278638095112803847548"
+  },
+  {
+    "token": "0x63803B132a59E481920c4c46a981bF45555b0421",
+    "symbol": "auraBAL",
+    "total": "145140041243576664975481"
+  }
+]
