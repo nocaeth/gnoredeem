@@ -50,19 +50,21 @@ export const REDEMPTION_SAFE_ADDRESS: Address = '0xD8cD32876624bE785E7CbdA82bC93
 export const REDEMPTION_CLAIM_DATE: string | null = null // e.g. '2026-08-15T00:00:00Z'
 
 /**
- * TODO: deploy RedemptionDistributor (the claim-phase contract), then paste its
- * Gnosis Chain address here. While this is the zero address the claim UI shows
- * "Claiming is not open yet".
+ * RedemptionDistributor (claim-phase contract), deployed on Gnosis Chain and verified on
+ * Sourcify (exact match). Setting a non-zero address turns the claim UI on; the claim button
+ * itself stays disabled until the on-chain `activated` flag is true (the Safe funds + approves,
+ * then activate() is called).
  */
-export const REDEMPTION_DISTRIBUTOR_ADDRESS: Address = ZERO_ADDRESS
+export const REDEMPTION_DISTRIBUTOR_ADDRESS: Address =
+  '0x09b2D4403385C992C5FBE0e1368193951Fa3F67D'
 
 /**
- * TODO: published claim manifest — the build-merkle output (per-holder { amounts,
- * proof } plus payoutTokens/payoutSymbols). Host it statically (or pin on IPFS) and
- * put the URL here. The proof is verified on-chain by claim(), so a wrong/stale
- * manifest can only revert — it can never mis-pay. Leave null until the root is live.
+ * Published claim manifest — the build-merkle output (per-holder { amounts, proof } plus
+ * payoutTokens/payoutSymbols), served same-origin from web/public/. The proof is verified
+ * on-chain by claim(), so a wrong/stale manifest can only revert — it can never mis-pay.
+ * Regenerate with offchain/build-merkle.ts and copy the output here on any root change.
  */
-export const REDEMPTION_CLAIM_MANIFEST_URL: string | null = null // e.g. '/claim-manifest.json'
+export const REDEMPTION_CLAIM_MANIFEST_URL: string | null = '/claim-manifest.json'
 
 // ── Derived helpers ──────────────────────────────────────────────────────────
 export const isAddressSet = (a: Address): boolean =>
