@@ -193,8 +193,14 @@ Record the deployed address, the tx hash, and the printed `token → approve amo
 
 The distributor holds nothing; the basket stays in the Safe and is pulled at claim time.
 
-1. **From the Safe**, `approve(distributor, amount)` for **exactly** each `payoutTotal` the deploy
-   printed (one approval per token). Approving the exact totals leaves no residual allowance.
+1. **From the Safe**, `approve(distributor, amount)` for each of the 7 tokens (one approval per
+   token). Two equivalent options:
+   - **Exact totals** — approve each `payoutTotal` the deploy printed. Self-drains to ~0 as claims
+     complete; no residual allowance.
+   - **Unlimited** (`type(uint256).max`) — simpler. Safe here: the distributor can only ever pull
+     the committed per-account amounts via `claim()` (claim-only, `hasClaimed`-guarded, funds go to
+     the leaf holder), so a larger allowance never expands what it can take. Leaves an inert
+     approval behind; optionally revoke (set to 0) after all claims settle for Safe hygiene.
 2. Call `activate()` (permissionless). It reverts unless, for **every** token, the Safe both holds
    (`UnderFunded`) and has approved (`NotApproved`) ≥ the committed total. Once it latches, claims open.
 
