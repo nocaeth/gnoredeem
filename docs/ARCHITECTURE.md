@@ -99,14 +99,22 @@ basket never enters this contract.
 
 Turns the on-chain deposit record into the claim manifest. Bun/TypeScript with viem:
 
-1. **`fetch-deposits.ts`** — reconstructs the canonical deposit set from chain: reads the
-   deployed contract's immutables, walks `Deposited` events in fixed-size chunks, and
-   requires an explicit `--to-block` that is finalized and strictly after the deadline. It
-   reconciles the reconstructed sums against the contract's `totalDeposited()` at that block,
-   then emits a build config carrying on-chain provenance (rate, totals, cutoff block/hash,
-   finalized head). This binds the root to chain state — an operator cannot paste a stale
-   rate or a truncated deposit set without the build failing.
-2. **`build-merkle.ts`** — applies the frozen `osgnoRate` to get each holder's GNO-equivalent
+1. **`treasury-basket.ts`** — the production basket reader. Reads the redemption Safe's live
+   payout-token balances on real Gnosis (no fork) at a chosen block, deriving the Safe from
+   the deposit contract's `safe()` immutable and verifying each token's on-chain symbol. It
+   emits `basket.json` (`[{ token, symbol, total }]`), the input `fetch-deposits.ts` consumes.
+   Deposit tokens (GNO/osGNO) are refused — paying them out would return depositors their own
+   stake.
+2. **`fetch-deposits.ts`** — reconstructs the canonical deposit set from chain: reads the
+   deployed contract's immutables, walks `Deposited` events in fixed-size chunks **over
+   HyperRPC** (via `HYPERRPC` / `ENVIO_API_KEY`; state reads and reconciliation stay on a real
+   Gnosis RPC), and requires an explicit `--to-block` that is finalized and strictly after the
+   deadline. It reconciles the reconstructed sums against the contract's `totalDeposited()` at
+   that block — the tripwire that makes HyperRPC-sourced logs safe to trust — then merges
+   `basket.json` and emits a build config carrying on-chain provenance (rate, totals, cutoff
+   block/hash, finalized head). This binds the root to chain state — an operator cannot paste a
+   stale rate or a truncated deposit set without the build failing.
+3. **`build-merkle.ts`** — applies the frozen `osgnoRate` to get each holder's GNO-equivalent
    weight (`rawGNO + rawOsGNO * rate / 1e18`, floored once per holder), allocates each basket
    asset pro-rata by weight (floor; flooring dust stays in the Safe), builds the
    `StandardMerkleTree`, and emits the root, the committed per-token totals (for the
@@ -117,8 +125,18 @@ Turns the on-chain deposit record into the claim manifest. Bun/TypeScript with v
 Two preview-only helpers support dry runs (never root-safe — the deploy script refuses their
 output): `preview-deposits.ts` reconstructs deposits at chain head while the window may still
 be open, and `treasury-nav.ts` reads the redemption Safe's payout-token balances on a Gnosis
-fork and emits a build-config so `build-merkle.ts` can be exercised before the Safe is funded
-for real. Both feed the same `build-merkle.ts`; neither is used to build a production root.
+**fork** (Tenderly) and emits a build-config so `build-merkle.ts` can be exercised before the
+Safe is funded for real. Both feed the same `build-merkle.ts`; neither is used to build a
+production root — the production basket comes from `treasury-basket.ts` reading real chain.
+
+### Claiming for holders (`claim-all.ts`)
+
+`claim-all.ts` is an optional relayer that submits `claim()` for every un-claimed holder in a
+`build-merkle` manifest from a funded key. Because `claim()` is permissionless and always pays
+`account`, the relayer never takes custody. It aborts unless the distributor is `activated`,
+simulates each claim before broadcasting, and is resumable and idempotent — a re-run skips
+already-claimed holders, and a holder whose leg reverts (blocked token, Safe shortfall) is left
+for a later run, never dropped. `--dry-run` simulates every claim and broadcasts nothing.
 
 ## Web app (`web/`)
 
