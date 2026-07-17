@@ -8,6 +8,7 @@
     "preview-deposits": "bun preview-deposits.ts",
     "treasury-nav": "bun treasury-nav.ts",
     "treasury-basket": "bun treasury-basket.ts",
+    "claim-all": "bun claim-all.ts",
     "test": "bun test",
     "preview": "bun preview-deposits.ts preview-deposits.json && bun treasury-nav.ts preview-deposits.json build-config.json && bun build-merkle.ts build-config.json merkle-preview.json"
   },
