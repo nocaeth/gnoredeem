@@ -13,8 +13,10 @@ COPY web/ ./
 # Vite inlines these into the bundle at build time — supplying them at runtime
 # would be far too late to reach the client.
 ARG VITE_GNOSIS_RPC=""
+ARG VITE_DRPC_API_KEY=""
 ARG VITE_WALLETCONNECT_PROJECT_ID=""
 ENV VITE_GNOSIS_RPC=$VITE_GNOSIS_RPC
+ENV VITE_DRPC_API_KEY=$VITE_DRPC_API_KEY
 ENV VITE_WALLETCONNECT_PROJECT_ID=$VITE_WALLETCONNECT_PROJECT_ID
 
 RUN bun run build

@@ -7,6 +7,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_GNOSIS_RPC: ${VITE_GNOSIS_RPC:-}
+        VITE_DRPC_API_KEY: ${VITE_DRPC_API_KEY:-}
         VITE_WALLETCONNECT_PROJECT_ID: ${VITE_WALLETCONNECT_PROJECT_ID:-}
     container_name: gnoredeem-web
     restart: unless-stopped

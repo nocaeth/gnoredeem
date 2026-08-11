@@ -12,15 +12,36 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
 // ── Chain ──────────────────────────────────────────────────────────────────
 export const GNOSIS_CHAIN_ID = 100 as const
 
-/** Read RPC for Gnosis Chain. Override with VITE_GNOSIS_RPC. */
+/**
+ * Docker build args default to "" rather than being absent, so `??` would keep
+ * an empty string and defeat every fallback below. Treat blank as unset.
+ */
+const envOrUndefined = (value: string | undefined): string | undefined =>
+  value !== undefined && value.trim() !== '' ? value : undefined
+
+/** DRPC key (public — inlined into the bundle, like every VITE_ value). */
+const DRPC_API_KEY: string | undefined = envOrUndefined(import.meta.env.VITE_DRPC_API_KEY)
+
+/**
+ * Read RPC for Gnosis Chain, in precedence order:
+ *   1. VITE_GNOSIS_RPC     — an explicit full URL always wins
+ *   2. premium DRPC        — https://lb.drpc.live/<network>/<key>, the org's
+ *                            standard HTTP JSON-RPC form (lb.drpc.org/ogrpc is
+ *                            the Dshackle gRPC bridge, not this)
+ *   3. public DRPC gateway — unauthenticated, rate-limited
+ */
 export const GNOSIS_RPC: string =
-  import.meta.env.VITE_GNOSIS_RPC ?? 'https://rpc.gnosischain.com'
+  envOrUndefined(import.meta.env.VITE_GNOSIS_RPC) ??
+  (DRPC_API_KEY
+    ? `https://lb.drpc.live/gnosis/${encodeURIComponent(DRPC_API_KEY)}`
+    : 'https://gnosis.drpc.org')
 
 /** WalletConnect Cloud project id (public — ships in the client bundle). Injected
  * wallets work without it. Baked in so no build-time/hosting env var is required;
  * VITE_WALLETCONNECT_PROJECT_ID still overrides if set. */
 export const WALLETCONNECT_PROJECT_ID: string =
-  import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? 'd35757c48cb097dc20bb0abd5a72e775'
+  envOrUndefined(import.meta.env.VITE_WALLETCONNECT_PROJECT_ID) ??
+  'd35757c48cb097dc20bb0abd5a72e775'
 
 // ── Token addresses (verified on Gnosis Chain, chainId 100) ──────────────────
 export const GNO_ADDRESS: Address = '0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb'
