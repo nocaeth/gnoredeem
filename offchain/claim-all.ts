@@ -56,8 +56,12 @@ export async function main(): Promise<void> {
   if (!key) throw new Error('PRIVATE_KEY required (relayer)')
 
   const account = privateKeyToAccount(key as `0x${string}`)
-  const pub = createPublicClient({ chain: gnosis, transport: http(RPC) })
-  const wallet = createWalletClient({ account, chain: gnosis, transport: http(RPC) })
+  // Per-request timeout (ms). Default matches viem's 10s; raise it (RPC_TIMEOUT_MS) for slow RPCs /
+  // forks so a laggy write doesn't abort a partial sweep — the run is resumable, but a higher timeout
+  // lets it finish in one pass.
+  const timeout = Number(process.env.RPC_TIMEOUT_MS ?? 10_000)
+  const pub = createPublicClient({ chain: gnosis, transport: http(RPC, { timeout }) })
+  const wallet = createWalletClient({ account, chain: gnosis, transport: http(RPC, { timeout }) })
 
   const { manifest } = loadManifest(manifestPath)
 

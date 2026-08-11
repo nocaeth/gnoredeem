@@ -1,0 +1,27 @@
+services:
+  gnoredeem-web:
+    image: ${GNOREDEEM_IMAGE:-ghcr.io/nocaeth/gnoredeem-web}:${IMAGE_TAG:-latest}
+    # Kept for local iteration; deploys pull the published image and never build.
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_GNOSIS_RPC: ${VITE_GNOSIS_RPC:-}
+        VITE_WALLETCONNECT_PROJECT_ID: ${VITE_WALLETCONNECT_PROJECT_ID:-}
+    container_name: gnoredeem-web
+    restart: unless-stopped
+    # Without a healthcheck `up -d --wait` only confirms "started", so the
+    # image-pull timer would call a container serving 502s a good deploy.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - internal
+
+networks:
+  internal:
+    name: gnosis-dashboard_internal
+    external: true

@@ -1,0 +1,14 @@
+# Only web/ and Caddyfile are needed to build the image. Everything else is
+# context transfer cost — and .env must never enter a build context.
+.env
+.env.*
+.git
+.github
+node_modules
+web/node_modules
+web/dist
+contracts
+offchain
+docs
+*.log
+.DS_Store
