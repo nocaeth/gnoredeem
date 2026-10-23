@@ -16,5 +16,8 @@
   "dependencies": {
     "@openzeppelin/merkle-tree": "^1.0.8",
     "viem": "^2.53.1"
+  },
+  "overrides": {
+    "ws": "8.21.0"
   }
 }
